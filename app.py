@@ -75,8 +75,10 @@ class LoansManager:
             reader = csv.DictReader(csvfile)
             for line in reader:
                 loans.append(
-                    Loan(line["name"], line["principal"], line["rate"], line["min_pmt"]))
-        return LoansManager(loans)
+                    Loan(line["name"], float(line["principal"]), float(line["rate"]), float(line["min_pmt"])))
+        manager = LoansManager(loans)
+        manager.refresh_loan_df()
+        return manager
 
     def save_to_file(self, filename: str) -> None:
         with open(filename, 'w') as csvfile:
@@ -155,9 +157,9 @@ class LoansManager:
 
 class Plotter:
     def __init__(self):
-        self.fig, self.ax = plt.subplots(2, 2)
+        self.fig, self.ax = plt.subplots(2, 2, figsize=(12, 10))
 
-    def update_fig(self, df) -> plt.Figure:
+    def update_fig(self, df: pd.DataFrame):
         if df.empty:
             return
         for axis in self.ax.flatten():
@@ -166,7 +168,6 @@ class Plotter:
         self._plot_balance_unstacked(self.ax[0][1], df)
         self._plot_cum_pmts(self.ax[1][1], df)
         self._plot_payment(self.ax[1][0], df)
-        return self.fig
 
     def _plot_balance(self, ax: plt.Axes, df: pd.DataFrame):
         """
