@@ -61,12 +61,14 @@ class Loan:
         return f"Loan({self.name}, {self.principal}, {self.rate}, {self.min_pmt})\n{self.get_dataframe().tail()}\n"
 
 
-class LoansManager:
-    def __init__(self, loans: list[Loan] = None):
+class LoanManager:
+    def __init__(self, loans: list[Loan] = None, one_time_pmts=None, payment_bands=None):
         self.loans = loans if loans is not None else []
         self.loan_df: pd.DataFrame = pd.DataFrame()
-        self.one_time_pmts: dict[int, float] = {}
-        self.payment_bands = [(0, 1000), (2, 1000)]
+        self.one_time_pmts: dict[int,
+                                 float] = one_time_pmts if one_time_pmts is not None else {}
+        self.payment_bands = payment_bands if payment_bands is not None else [
+            (0, 1000)]
 
     @staticmethod
     def read_from_file(filename: str):
@@ -76,7 +78,7 @@ class LoansManager:
             for line in reader:
                 loans.append(
                     Loan(line["name"], float(line["principal"]), float(line["rate"]), float(line["min_pmt"])))
-        manager = LoansManager(loans)
+        manager = LoanManager(loans)
         manager.refresh_loan_df()
         return manager
 
@@ -147,9 +149,6 @@ class LoansManager:
                         f"Snowball amount should never become negative - we paid more that we can afford!")
                 if loan.done:
                     loan_data.append(loan.get_dataframe())
-            print(f"Month {month}")
-            for loan in ongoing_loans:
-                print(loan)
             ongoing_loans = [loan for loan in ongoing_loans if not loan.done]
             month += 1
         self.loan_df = pd.concat(loan_data)
@@ -159,7 +158,7 @@ class Plotter:
     def __init__(self):
         self.fig, self.ax = plt.subplots(2, 2, figsize=(12, 10))
 
-    def update_fig(self, df: pd.DataFrame):
+    def refresh_figure(self, df: pd.DataFrame):
         if df.empty:
             return
         for axis in self.ax.flatten():
