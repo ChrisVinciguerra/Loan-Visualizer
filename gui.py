@@ -129,13 +129,14 @@ class LoanApp:
             row=4, column=0, columnspan=3, pady=1)
 
     def plot_loans(self):
-        figure = self.plotter.update_fig(self.loans_manager.loan_data)
         for widget in self.plot_frame.winfo_children():
             if isinstance(widget, FigureCanvasTkAgg):
                 widget.get_tk_widget().destroy()
 
+        print("Updated figure!")
+        figure = self.plotter.update_fig(self.loans_manager.loan_df)
         canvas = FigureCanvasTkAgg(figure, self.plot_frame)
-        canvas.get_tk_widget().grid(row=0, column=0, sticky='nsew')
+        canvas.get_tk_widget()
         canvas.draw()
 
 
