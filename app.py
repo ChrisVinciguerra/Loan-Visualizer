@@ -3,42 +3,46 @@ import bisect
 import csv
 import matplotlib.pyplot as plt
 import pandas as pd
+from decimal import Decimal
 
 
 class Loan:
     """
-    Class to represent a loan with a name, principal, rate, and minimum payment
-    Can generate a dataframe of the ongoing balance of the loan over time
+    Represents a loan with a name, principal, rate, and minimum payment
+    Generates a dataframe of the ongoing balance of the loan over time through
+    repeated calls to calculate_next_month
     """
 
-    def __init__(self, name: str, principal: float, rate: float, min_pmt: float):
+    def __init__(self, name: str, principal: Decimal, rate: Decimal, min_pmt: Decimal):
         self.name = name
         self.principal = principal
         self.rate = rate
         self.min_pmt = min_pmt
         self.balances = [principal]
-        self.interests = [0.0]
-        self.payments = [0.0]
+        self.interests = [Decimal(0)]
+        self.payments = [Decimal(0)]
         self.done = False
 
-    def calculate_next_month(self, payment: float) -> float:
+    def calculate_next_month(self, payment: Decimal) -> Decimal:
         """
-        Calculate the next month's data on the loan given a monthly payment
-        Returns the value of the actual payment made (which may be less than the input payment if the loan is paid off this month)
+        Calculate the next month's loan data given a (max allowed) monthly payment
+        Returns the value of the actual payment made (which may be less than the input if the loan is paid off)
         """
-        # If the balance is 0, we're done
+        # If the balance is 0, we don't pay anything
         if self.done:
             return 0.0
 
         # Calculate the new balance and interest
         prev_balance = self.balances[-1]
-        interest = prev_balance * (self.rate/12)
+        interest = prev_balance * self.rate/12
         new_balance = prev_balance + interest - payment
-        # If our loan is overpaid, adjust the payment
+
+        # If our loan is (over)paid, adjust the payment and mark complete
         if new_balance <= 0:
             payment = prev_balance + interest
-            new_balance = 0
+            new_balance = Decimal(0)
             self.done = True
+
         # Add the new data to the lists
         self.interests.append(interest)
         self.balances.append(new_balance)
@@ -48,13 +52,18 @@ class Loan:
 
     def get_dataframe(self) -> pd.DataFrame:
         """Return the loan's data as a dataframe"""
-        return pd.DataFrame({"Loan": self.name, "Month": range(len(self.balances)),  "Interest": self.interests, "Payment": self.payments, "Balance": self.balances})
+        return pd.DataFrame({"Loan": self.name,
+                             "Month": range(len(self.balances)),
+                             "Interest": self.interests,
+                             "Payment": self.payments,
+                             "Balance": self.balances}
+                            ).astype({"Loan": str, "Month": int, "Interest": float, "Payment": float, "Balance": float})
 
     def reset(self) -> None:
         """Reset the loan to its initial state"""
         self.balances = [self.principal]
-        self.interests = [0.0]
-        self.payments = [0.0]
+        self.interests = [Decimal(0)]
+        self.payments = [Decimal(0)]
         self.done = False
 
     def __repr__(self):
@@ -62,11 +71,16 @@ class Loan:
 
 
 class LoanManager:
+    """
+    Perform CRUD updates on a list of loans
+    Automatically updates the loan dataframe when loans are added, updated, or deleted
+    """
+
     def __init__(self, loans: list[Loan] = None, one_time_pmts=None, payment_bands=None):
         self.loans = loans if loans is not None else []
         self.loan_df: pd.DataFrame = pd.DataFrame()
         self.one_time_pmts: dict[int,
-                                 float] = one_time_pmts if one_time_pmts is not None else {}
+                                 Decimal] = one_time_pmts if one_time_pmts is not None else {}
         self.payment_bands = payment_bands if payment_bands is not None else [
             (0, 1000)]
 
@@ -77,7 +91,7 @@ class LoanManager:
             reader = csv.DictReader(csvfile)
             for line in reader:
                 loans.append(
-                    Loan(line["name"], float(line["principal"]), float(line["rate"]), float(line["min_pmt"])))
+                    Loan(line["name"], Decimal(line["principal"]), Decimal(line["rate"]), Decimal(line["min_pmt"])))
         manager = LoanManager(loans)
         manager.refresh_loan_df()
         return manager
@@ -156,7 +170,7 @@ class LoanManager:
 
 class Plotter:
     def __init__(self):
-        self.fig, self.ax = plt.subplots(2, 2, figsize=(12, 10))
+        self.fig, self.ax = plt.subplots(2, 2, figsize=(8, 6))
 
     def refresh_figure(self, df: pd.DataFrame):
         if df.empty:
@@ -167,6 +181,7 @@ class Plotter:
         self._plot_balance_unstacked(self.ax[0][1], df)
         self._plot_cum_pmts(self.ax[1][1], df)
         self._plot_payment(self.ax[1][0], df)
+        return self.fig
 
     def _plot_balance(self, ax: plt.Axes, df: pd.DataFrame):
         """
@@ -250,5 +265,6 @@ class Plotter:
         """
         grouped = df.groupby("Loan").sum()
         grouped["Principal"] = grouped["Payment"] - grouped["Interest"]
-        grouped[["Principal", "Interest"]].plot(
+        print(grouped.dtypes)
+        grouped[["Principal", "Interest"]].astype(float).plot(
             kind="bar", stacked=True, ax=ax)
