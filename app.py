@@ -66,8 +66,8 @@ class Loan:
         self.payments = [Decimal(0)]
         self.done = False
 
-    def __repr__(self):
-        return f"Loan({self.name}, {self.principal}, {self.rate}, {self.min_pmt})\n{self.get_dataframe().tail()}\n"
+    def __str__(self):
+        return f"Loan({self.name}, {self.principal}, {self.rate}, {self.min_pmt})\n"
 
 
 class LoanManager:
@@ -83,6 +83,7 @@ class LoanManager:
                                  Decimal] = one_time_pmts if one_time_pmts is not None else {}
         self.payment_bands = payment_bands if payment_bands is not None else [
             (0, 1000)]
+        self.refresh_loan_df()
 
     @staticmethod
     def read_from_file(filename: str):
@@ -92,9 +93,7 @@ class LoanManager:
             for line in reader:
                 loans.append(
                     Loan(line["name"], Decimal(line["principal"]), Decimal(line["rate"]), Decimal(line["min_pmt"])))
-        manager = LoanManager(loans)
-        manager.refresh_loan_df()
-        return manager
+        return LoanManager(loans)
 
     def save_to_file(self, filename: str) -> None:
         with open(filename, 'w') as csvfile:
@@ -167,30 +166,37 @@ class LoanManager:
             month += 1
         self.loan_df = pd.concat(loan_data)
 
+    def __str__(self) -> str:
+        s = ""
+        for loan in self.loans:
+            s += str(loan)
+        return s
+
 
 class Plotter:
     def __init__(self):
         self.fig, self.ax = plt.subplots(2, 2, figsize=(8, 6))
 
-    def refresh_figure(self, df: pd.DataFrame):
+    def refresh(self, df: pd.DataFrame):
         if df.empty:
             return
         for axis in self.ax.flatten():
             axis.clear()
-        self._plot_balance(self.ax[0][0], df)
-        self._plot_balance_unstacked(self.ax[0][1], df)
-        self._plot_cum_pmts(self.ax[1][1], df)
-        self._plot_payment(self.ax[1][0], df)
-        return self.fig
+        self.df = df
+        self._plot_balance(self.ax[0][0])
+        self._plot_balance_unstacked(self.ax[0][1])
+        self._plot_cum_pmts(self.ax[1][1])
+        self._plot_payment(self.ax[1][0])
 
-    def _plot_balance(self, ax: plt.Axes, df: pd.DataFrame):
+    def _plot_balance(self, ax: plt.Axes):
         """
         Plot a loan balances on stackplot
         """
-        pivot_df = df.pivot_table(
+        pivot_df = self.df.pivot_table(
             index="Month", columns="Loan", values="Balance", fill_value=0)
-        pivot_df = pivot_df[sorted(
-            pivot_df.columns, key=lambda x: pivot_df[x].iloc[0], reverse=True)]
+        self.order = sorted(
+            pivot_df.columns, key=lambda x: pivot_df[x].iloc[0], reverse=True)
+        pivot_df = pivot_df[self.order]
         months = pivot_df.index.values
         loan_balances = pivot_df.transpose().values
         ax.stackplot(months, loan_balances, labels=pivot_df.columns)
@@ -198,14 +204,13 @@ class Plotter:
         ax.set_xlabel("Month")
         ax.set_ylabel("Balance")
 
-    def _plot_payment(self, ax: plt.Axes, df: pd.DataFrame):
+    def _plot_payment(self, ax: plt.Axes):
         """
         Plot payments by loan on a stacked bar chart
         """
-        pivot_df = df.pivot_table(
+        pivot_df = self.df.pivot_table(
             index="Month", columns="Loan", values="Payment", fill_value=0)
-        pivot_df = pivot_df[sorted(
-            pivot_df.columns, key=lambda x: pivot_df[x].iloc[1], reverse=True)]
+        pivot_df = pivot_df[self.order]
         months = pivot_df.index.values
         loan_balances = pivot_df.transpose().values
 
@@ -215,56 +220,58 @@ class Plotter:
         ax.set_xlabel("Month")
         ax.set_ylabel("Payment")
 
-    def _plot_interest(self, ax: plt.Axes, df: pd.DataFrame):
-        """
-        Plot loan interest on a stacked bar chart
-        """
-        pivot_df = df.pivot_table(
-            index="Month", columns="Loan", values="Interest", fill_value=0)
-        pivot_df = pivot_df[sorted(
-            pivot_df.columns, key=lambda x: pivot_df[x].iloc[1], reverse=True)]
-        months = pivot_df.index.values
-        loan_balances = pivot_df.transpose().values
+    # def _plot_interest(self, ax: plt.Axes):
+    #     """
+    #     Plot loan interest on a stacked bar chart
+    #     """
+    #     pivot_df = self.df.pivot_table(
+    #         index="Month", columns="Loan", values="Interest", fill_value=0)
+    #     pivot_df = pivot_df[self.order]
+    #     months = pivot_df.index.values
+    #     loan_balances = pivot_df.transpose().values
 
-        # Plot the balance and interest
-        ax.stackplot(months, loan_balances, labels=pivot_df.columns)
-        ax.legend(loc='upper right')
-        ax.set_xlabel("Month")
-        ax.set_ylabel("Interest")
+        # # Plot the balance and interest
+        # ax.stackplot(months, loan_balances, labels=pivot_df.columns)
+        # ax.legend(loc='upper right')
+        # ax.set_xlabel("Month")
+        # ax.set_ylabel("Interest")
 
-    def _plot_payment_dest(self, ax: plt.Axes, df: pd.DataFrame):
-        """
-        Plot loan interest vs the principal on a stackplot
-        """
-        grouped = df.groupby("Month").sum()
-        months = grouped.index.values
-        interest = grouped["Interest"].values
-        principal = (grouped["Payment"] - grouped["Interest"]).values
+    # def _plot_payment_dest(self, ax: plt.Axes):
+    #     """
+    #     Plot loan interest vs the principal on a stackplot
+    #     """
+    #     grouped = self.df.groupby("Month").sum()
+    #     months = grouped.index.values
+    #     interest = grouped["Interest"].values
+    #     principal = (grouped["Payment"] - grouped["Interest"]).values
 
-        # Plot the balance and interest
-        ax.stackplot(months, principal, interest,
-                     labels=["Principal", "Interest"])
-        ax.legend(loc='upper right')
-        ax.set_xlabel("Month")
-        ax.set_ylabel("Payment")
+    #     # Plot the balance and interest
+    #     ax.stackplot(months, principal, interest,
+    #                  labels=["Principal", "Interest"])
+    #     ax.legend(loc='upper right')
+    #     ax.set_xlabel("Month")
+    #     ax.set_ylabel("Payment")
 
-    def _plot_balance_unstacked(self, ax: plt.Axes, df: pd.DataFrame):
+    def _plot_balance_unstacked(self, ax: plt.Axes):
         """
         Plot loan balances on a line chart
         """
-        grouped = df.groupby("Loan")
+        grouped = self.df.groupby("Loan")
+        plots = []
         for name, group in grouped:
-            ax.plot(group["Month"], group["Balance"], label=name)
+            plots.append((name, group["Month"], group["Balance"]))
+        for name, months, balance in sorted(plots, key=lambda x: x[2].iloc[0], reverse=True):
+            ax.plot(months, balance, label=name)
         ax.legend(loc='upper right')
         ax.set_xlabel("Month")
         ax.set_ylabel("Balance")
 
-    def _plot_cum_pmts(self, ax: plt.Axes, df: pd.DataFrame):
+    def _plot_cum_pmts(self, ax: plt.Axes):
         """
         Plot cumulative payments on a line chart
         """
-        grouped = df.groupby("Loan").sum()
+        grouped = self.df.groupby("Loan").sum()
+        grouped = grouped.loc[self.order]
         grouped["Principal"] = grouped["Payment"] - grouped["Interest"]
-        print(grouped.dtypes)
         grouped[["Principal", "Interest"]].astype(float).plot(
             kind="bar", stacked=True, ax=ax)

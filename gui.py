@@ -1,3 +1,4 @@
+from decimal import Decimal
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -9,11 +10,140 @@ from app import LoanManager, Plotter
 # Round values from sliders to 2 decimal places
 
 
-class LoanApp:
+class InfoFrame(ttk.Frame):
+    """
+    Frame that displays the loan information in a table like view
+    Has buttons to edit and delete loans that creates a popup window
+    """
+
+    def __init__(self, parent, loan_manager, refresh_callback=None, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.loan_manager = loan_manager
+        self.refresh_callback = refresh_callback
+        self.draw()
+
+    def draw(self):
+        # Draw header
+        ttk.Label(self, text="Loan").grid(
+            row=0, column=0, padx=20, pady=10, sticky='n')
+        ttk.Label(self, text="Principal").grid(
+            row=0, column=1, padx=20, pady=10, sticky='n')
+        ttk.Label(self, text="Rate").grid(
+            row=0, column=2, padx=20, pady=10, sticky='n')
+        ttk.Label(self, text="Minimum Payment").grid(
+            row=0, column=3, padx=20, pady=10, sticky='n')
+        # Draw each net loan info
+        for i, loan in enumerate(self.loan_manager.loans):
+            ttk.Label(self, text=f"{loan.name}").grid(
+                row=i+1, column=0, padx=20, pady=10, sticky='n')
+            ttk.Label(self, text=f"${loan.principal:.2f}").grid(
+                row=i+1, column=1, padx=20, pady=10, sticky='n')
+            ttk.Label(self, text=f"{loan.rate*100:.2f}%").grid(
+                row=i+1, column=2, padx=20, pady=10, sticky='n')
+            ttk.Label(self, text=f"${loan.min_pmt:.2f}").grid(
+                row=i+1, column=3, padx=20, pady=10, sticky='n')
+            ttk.Button(self, text="Edit", command=lambda i=i: self.open_loan_popup(
+                i), bootstyle="warning").grid(row=i+1, column=4, padx=20, pady=10)
+            ttk.Button(self, text="Delete", command=lambda i=i: self.delete_loan(
+                i), bootstyle="danger").grid(row=i+1, column=5, padx=20, pady=10)
+
+    def open_loan_popup(self, index):
+        """Opens a popup window to edit the loan at the given index"""
+        PopupWindow(self, self.loan_manager, index,
+                    refresh_callback=self.refresh_callback)
+
+    def delete_loan(self, index):
+        """Deletes the loan at the given index then refreshes the frame"""
+        self.loan_manager.delete_loan(index)
+        # Calls the refresh callback, will eventually calls our own refresh too
+        self.refresh_callback()
+
+    def clear(self):
+        for widget in self.winfo_children():
+            widget.destroy()
+
+    def refresh(self):
+        self.clear()
+        self.draw()
+
+
+class PopupWindow(ttk.Toplevel):
+    def __init__(self, parent, loan_manager, index=None, refresh_callback=None, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.loan_manager = loan_manager
+        self.index = index
+        self.refresh_callback = refresh_callback
+        self.popup = ttk.Frame(self)
+        self.draw()
+
+    def draw(self):
+        self.popup.grid(row=0, column=0, sticky='nsew')
+        self.title("Edit Loan" if self.index is not None else "New Loan")
+
+        ttk.Label(self.popup, text="Name").grid(
+            row=0, column=0, pady=10, padx=10, sticky='nw')
+        self.name_var = ttk.StringVar(
+            value=self.loan_manager.loans[self.index].name if self.index is not None else "")
+        ttk.Entry(self.popup, textvariable=self.name_var, width=30).grid(
+            row=0, column=1, pady=10, padx=10, sticky='n')
+
+        ttk.Label(self.popup, text="Principal Balance").grid(
+            row=1, column=0, sticky='nw', pady=10, padx=10)
+        self.principal_var = ttk.DoubleVar(
+            value=self.loan_manager.loans[self.index].principal if self.index is not None else 0)
+        ttk.Entry(self.popup, textvariable=self.principal_var, width=30).grid(
+            row=1, column=1, pady=10, padx=10, sticky='n')
+        principal_slider = ttk.Scale(
+            self.popup, from_=0, to=100000, orient=ttk.HORIZONTAL, variable=self.principal_var,
+            length=500, command=lambda x: self.principal_var.set(round(self.principal_var.get(), -3)))
+        principal_slider.grid(row=1, column=2, pady=10, padx=10, sticky='e')
+
+        ttk.Label(self.popup, text="Interest Rate (%)").grid(
+            row=2, column=0, sticky='nw', pady=10, padx=10)
+        self.interest_var = ttk.DoubleVar(
+            value=self.loan_manager.loans[self.index].rate*100 if self.index is not None else 0)
+        ttk.Entry(self.popup, textvariable=self.interest_var, width=30).grid(
+            row=2, column=1, pady=10, padx=10, sticky='n')
+        interest_slider = ttk.Scale(
+            self.popup, from_=0, to=20, orient=ttk.HORIZONTAL, variable=self.interest_var, length=500,
+            command=lambda x: self.interest_var.set(round(self.interest_var.get(), 1)))
+        interest_slider.grid(row=2, column=2, pady=10, padx=10, sticky='e')
+
+        ttk.Label(self.popup, text="Minimum Payment").grid(
+            row=3, column=0, sticky='nw', pady=10, padx=10)
+        self.min_payment_var = ttk.DoubleVar(
+            value=self.loan_manager.loans[self.index].min_pmt if self.index is not None else 0)
+        ttk.Entry(self.popup, textvariable=self.min_payment_var, width=30).grid(
+            row=3, column=1, pady=10, padx=10, sticky='n')
+        ttk.Button(self.popup, text="Save", command=self.save_loan, bootstyle="success").grid(
+            row=4, column=0, pady=10)
+
+    def save_loan(self):
+        name = self.name_var.get()
+        principal = self.principal_var.get()
+        interest = self.interest_var.get()
+        min_payment = self.min_payment_var.get()
+        if self.index is not None:
+            self.loan_manager.update_loan(
+                self.index, name, Decimal(str(round(principal, 2))), Decimal(str(round(interest)))/100, Decimal(str(round(min_payment, 2))))
+        else:
+            self.loan_manager.add_loan(
+                name, Decimal(str(principal)), Decimal(str(interest))/100, Decimal(str(min_payment)))
+        self.refresh_callback()
+        super().destroy()
+
+    def clear(self):
+        for widget in self.winfo_children():
+            widget.destroy()
+
+    def refresh(self):
+        self.clear()
+        self.draw()
+
+
+class LoanApp(ttk.Window):
     def __init__(self):
-        ttk.utility.enable_high_dpi_awareness()
-        self.root = ttk.Window(title="Loan Visualizer")
-        self.style = ttk.Style("cosmo")
+        super().__init__(title="Loan Manager")
         self.style.configure("TLabel", font=("Arial", 14))
         self.style.configure("TButton", font=("Arial", 14))
 
@@ -26,116 +156,32 @@ class LoanApp:
 
         # Create the new loan button
         self.new_loan_button = ttk.Button(
-            self.root, text="New Loan", command=self.open_loan_popup, bootstyle="primary")
+            self, text="New Loan", command=lambda: PopupWindow(self, self.loan_manager, refresh_callback=self.refresh), bootstyle="primary")
         self.new_loan_button.grid(row=0, column=0, pady=10, sticky='n')
 
-        # Create the frame where current loans info is displayed
-        self.loan_info_frame = ttk.Frame(self.root)
-        self.loan_info_frame.grid(row=1, column=0, pady=10, sticky='n')
+        # Create the info frame and place it on the grid
+        self.info_frame = InfoFrame(self, self.loan_manager, self.refresh)
+        self.info_frame.grid(row=1, column=0, pady=10, sticky='n')
 
-        # Create the frame where the actual plot is displayed
-        self.canvas = FigureCanvasTkAgg(self.plotter.fig, self.root)
+        # Create the frame that will hold the plot
+        self.canvas = FigureCanvasTkAgg(self.plotter.fig, self)
         self.canvas.get_tk_widget().grid(row=2, column=0, sticky='new')
 
         # Draw the initial state
         self.refresh()
 
     def refresh(self):
-        # Redraw the loans info frame
-        for widget in self.loan_info_frame.winfo_children():
-            widget.destroy()
-        # Draw header
-        ttk.Label(self.loan_info_frame, text="Loan").grid(
-            row=0, column=0, padx=20, pady=10, sticky='n')
-        ttk.Label(self.loan_info_frame, text="Principal").grid(
-            row=0, column=1, padx=20, pady=10, sticky='n')
-        ttk.Label(self.loan_info_frame, text="Rate").grid(
-            row=0, column=2, padx=20, pady=10, sticky='n')
-        ttk.Label(self.loan_info_frame, text="Minimum Payment").grid(
-            row=0, column=3, padx=20, pady=10, sticky='n')
-        # Draw each net loan info
-        for i, loan in enumerate(self.loan_manager.loans):
-            ttk.Label(self.loan_info_frame, text=f"{loan.name}").grid(
-                row=i+1, column=0, padx=20, pady=10, sticky='n')
-            ttk.Label(self.loan_info_frame, text=f"${loan.principal:.2f}").grid(
-                row=i+1, column=1, padx=20, pady=10, sticky='n')
-            ttk.Label(self.loan_info_frame, text=f"{loan.rate*100:.2f}%").grid(
-                row=i+1, column=2, padx=20, pady=10, sticky='n')
-            ttk.Label(self.loan_info_frame, text=f"${loan.min_pmt:.2f}").grid(
-                row=i+1, column=3, padx=20, pady=10, sticky='n')
-            ttk.Button(self.loan_info_frame, text="Edit", command=lambda i=i: self.open_loan_popup(
-                i), bootstyle="warning").grid(row=i+1, column=4, padx=20, pady=10)
-            ttk.Button(self.loan_info_frame, text="Delete", command=lambda i=i: self.delete_loan(
-                i), bootstyle="danger").grid(row=i+1, column=5, padx=20, pady=10)
         self.loan_manager.save_to_file("loans.csv")
-        self.plotter.refresh_figure(self.loan_manager.loan_df)
-        # self.canvas.draw()
-
-    def delete_loan(self, index):
-        self.loan_manager.delete_loan(index)
-        self.refresh()
-
-    def open_loan_popup(self, index=None):
-        popup = ttk.Toplevel(self.root).grid(row=0, column=0, sticky='nsew')
-        popup.title("Edit Loan" if index is not None else "New Loan")
-
-        ttk.Label(popup, text="Name").grid(
-            row=0, column=0, pady=10, padx=10, sticky='nw')
-        name_var = ttk.StringVar(
-            value=self.loan_manager.loans[index].name if index is not None else "")
-        ttk.Entry(popup, textvariable=name_var, width=20).grid(
-            row=0, column=1, pady=10, padx=10, sticky='n')
-
-        ttk.Label(popup, text="Principal Balance").grid(
-            row=1, column=0, sticky='nw', pady=10, padx=10)
-        principal_var = ttk.DoubleVar(
-            value=self.loan_manager.loans[index].principal if index is not None else 0)
-        ttk.Entry(popup, textvariable=principal_var, width=20).grid(
-            row=1, column=1, pady=10, padx=10, sticky='n')
-        principal_slider = ttk.Scale(
-            popup, from_=0, to=100000, orient=ttk.HORIZONTAL, variable=principal_var,
-            length=300, command=lambda x: principal_var.set(round(principal_var.get()/10)*10))
-        principal_slider.grid(row=1, column=2, pady=10, padx=10, sticky='e')
-
-        ttk.Label(popup, text="Interest Rate (%)").grid(
-            row=2, column=0, sticky='nw', pady=10, padx=10)
-        interest_var = ttk.DoubleVar(
-            value=self.loan_manager.loans[index].rate*100 if index is not None else 0)
-        ttk.Entry(popup, textvariable=interest_var, width=20).grid(
-            row=2, column=1, pady=10, padx=10, sticky='n')
-        interest_slider = ttk.Scale(
-            popup, from_=0, to=30, orient=ttk.HORIZONTAL, variable=interest_var, length=300,
-            command=lambda x: interest_var.set(round(interest_var.get(), 1)))
-        interest_slider.grid(row=2, column=2, pady=10, padx=10, sticky='e')
-
-        ttk.Label(popup, text="Minimum Payment").grid(
-            row=3, column=0, sticky='nw', pady=10, padx=10)
-        min_payment_var = ttk.DoubleVar(
-            value=self.loan_manager.loans[index].min_pmt if index is not None else 0)
-        ttk.Entry(popup, textvariable=min_payment_var, width=20).grid(
-            row=3, column=1, pady=10, padx=10, sticky='n')
-
-        def save_loan():
-            name = name_var.get()
-            principal = principal_var.get()
-            interest = interest_var.get()/100.0
-            min_payment = min_payment_var.get()
-            if index is not None:
-                self.loan_manager.update_loan(
-                    index, name, principal, interest, min_payment)
-            else:
-                self.loan_manager.add_loan(
-                    name, principal, interest, min_payment)
-            self.refresh()
-            popup.destroy()
-
-        ttk.Button(popup, text="Save", command=save_loan, bootstyle="success").grid(
-            row=4, column=0, pady=10)
+        self.info_frame.refresh()
+        self.plotter.refresh(self.loan_manager.loan_df)
+        self.canvas.draw()
+        print(self.loan_manager)
 
 
 def main():
+    ttk.utility.enable_high_dpi_awareness()
     app = LoanApp()
-    app.root.mainloop()
+    app.mainloop()
 
 
 if __name__ == "__main__":
