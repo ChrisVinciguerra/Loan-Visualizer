@@ -67,7 +67,7 @@ class Loan:
         self.done = False
 
     def __str__(self):
-        return f"Loan({self.name}, {self.principal}, {self.rate}, {self.min_pmt})\n"
+        return f'Loan("{self.name}", {self.principal}, {self.rate}, {self.min_pmt})\n'
 
 
 class LoanManager:
@@ -76,33 +76,46 @@ class LoanManager:
     Automatically updates the loan dataframe when loans are added, updated, or deleted
     """
 
-    def __init__(self, loans: list[Loan] = None, one_time_pmts=None, payment_bands=None):
+    def __init__(self, loans: list[Loan] = None, payment_bands=None):
         self.loans = loans if loans is not None else []
         self.loan_df: pd.DataFrame = pd.DataFrame()
-        self.one_time_pmts: dict[int,
-                                 Decimal] = one_time_pmts if one_time_pmts is not None else {}
-        self.payment_bands = payment_bands if payment_bands is not None else [
-            (0, 1000)]
+        self.payment_bands = payment_bands if payment_bands is not None else {
+            0: 1000}
         self.refresh_loan_df()
 
     @staticmethod
-    def read_from_file(filename: str):
+    def read_from_file():
         loans = []
-        with open(filename, 'r') as csvfile:
+        with open("loans.csv", 'r') as csvfile:
             reader = csv.DictReader(csvfile)
             for line in reader:
                 loans.append(
                     Loan(line["name"], Decimal(line["principal"]), Decimal(line["rate"]), Decimal(line["min_pmt"])))
-        return LoanManager(loans)
 
-    def save_to_file(self, filename: str) -> None:
-        with open(filename, 'w') as csvfile:
+        with open("payment_bands.csv", 'r') as csvfile:
+            reader = csv.DictReader(csvfile)
+            payment_bands = {int(line["month"]): Decimal(
+                line["payment"]) for line in reader}
+        return LoanManager(loans, payment_bands)
+
+    def save_to_file(self) -> None:
+        """
+        Save the loan info in loans.csv
+        Save the payment bands in payment_bands.csv
+        """
+        with open("loans.csv", 'w') as csvfile:
             fieldnames = ["name", "principal", "rate", "min_pmt"]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for loan in self.loans:
                 writer.writerow({"name": loan.name, "principal": loan.principal,
                                 "rate": loan.rate, "min_pmt": loan.min_pmt})
+        with open("payment_bands.csv", 'w') as csvfile:
+            fieldnames = ["month", "payment"]
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            for month, payment in self.payment_bands.items():
+                writer.writerow({"month": month, "payment": payment})
 
     def add_loan(self, name, principal, rate, min_pmt) -> None:
         self.loans.append(Loan(name, principal, rate, min_pmt))
@@ -118,6 +131,28 @@ class LoanManager:
             del self.loans[index]
             self.refresh_loan_df()
 
+    def add_payment_band(self, month: int, payment: Decimal) -> None:
+        self.payment_bands[month] = payment
+        self.refresh_loan_df()
+
+    def delete_payment_band(self, month: int) -> None:
+        if month in self.payment_bands:
+            del self.payment_bands[month]
+            if self.payment_bands == {}:
+                self.payment_bands = {0: 1000}
+            self.refresh_loan_df()
+        # Dont let it ever be empty
+
+    def find_payment_amount(self, month: int) -> Decimal:
+        """
+        Find the payment amount corresponding to a given month
+        """
+        months, incomes = zip(*
+                              sorted(self.payment_bands.items(), key=lambda x: x[0]))
+        index = bisect.bisect_right(months, month)
+        print(months, incomes, index)
+        return incomes[index-1]
+
     def refresh_loan_df(self) -> None:
         """
         Calculate the balance of loans over time
@@ -131,22 +166,16 @@ class LoanManager:
         for loan in ongoing_loans:
             loan.reset()
 
-        # Calculate the time intervals and their corresponding values
-        boundaries, payment_values = [i for i in zip(*self.payment_bands)]
-
         # Calculate the balance of the loans over time
         loan_data = []
         month = 1
         while ongoing_loans:
             # Find the index of the interval that the payment belongs to
-            index = bisect.bisect_right(boundaries, month)
-            payment = payment_values[index-1]
-            # If there is an additional payment this month, add it
-            if month in self.one_time_pmts:
-                payment += self.one_time_pmts[month]
+            payment = self.find_payment_amount(month)
             # Calculate the next month on each loan
             minimum_payments = sum(
                 (min(loan.min_pmt, loan.balances[-1]) for loan in ongoing_loans))
+            print(month, payment)
             snowball_amt = payment - minimum_payments
             if snowball_amt < 0:
                 raise ValueError(
@@ -174,8 +203,13 @@ class LoanManager:
 
 
 class Plotter:
+    """
+    Holds a figure containing the main loan plots
+    """
+
     def __init__(self):
-        self.fig, self.ax = plt.subplots(2, 2, figsize=(8, 6))
+        self.fig, self.ax = plt.subplots(2, 2, figsize=(12, 6))
+        self.fig.set_tight_layout(True)
 
     def refresh(self, df: pd.DataFrame):
         if df.empty:
@@ -275,3 +309,5 @@ class Plotter:
         grouped["Principal"] = grouped["Payment"] - grouped["Interest"]
         grouped[["Principal", "Interest"]].astype(float).plot(
             kind="bar", stacked=True, ax=ax)
+        ax.set_xticklabels(self.order, rotation=30)
+        ax.set_xlabel(None)
