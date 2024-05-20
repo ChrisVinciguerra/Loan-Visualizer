@@ -150,7 +150,6 @@ class LoanManager:
         months, incomes = zip(*
                               sorted(self.payment_bands.items(), key=lambda x: x[0]))
         index = bisect.bisect_right(months, month)
-        print(months, incomes, index)
         return incomes[index-1]
 
     def refresh_loan_df(self) -> None:
@@ -175,11 +174,11 @@ class LoanManager:
             # Calculate the next month on each loan
             minimum_payments = sum(
                 (min(loan.min_pmt, loan.balances[-1]) for loan in ongoing_loans))
-            print(month, payment)
+            print(month, payment, minimum_payments)
             snowball_amt = payment - minimum_payments
             if snowball_amt < 0:
                 raise ValueError(
-                    f"Minimum payments of {minimum_payments} are greater than the required minimum of {payment}")
+                    f"Minimum payments of {minimum_payments} are greater than our current payment of {payment}")
             # Go through each loan, paying in order of descending interest rate
             for loan in ongoing_loans:
                 minimum_payment = min(loan.min_pmt, loan.balances[-1])
