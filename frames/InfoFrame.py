@@ -20,46 +20,53 @@ class InfoFrame(ttk.Frame):
     def draw(self):
         ttk.Button(
             self, text="New Loan",
-            command=self.open_loan_popup,
+            command=self._open_loan_popup,
             bootstyle="primary"
-        ).grid(row=0, column=0, sticky='ew', pady=10, padx=20, columnspan=6)
-        # Draw header
-        ttk.Label(self, text="Loan").grid(
-            row=1, column=0, padx=20, pady=10, sticky='n')
-        ttk.Label(self, text="Principal").grid(
-            row=1, column=1, padx=20, pady=10, sticky='n')
-        ttk.Label(self, text="Rate").grid(
-            row=1, column=2, padx=20, pady=10, sticky='n')
-        ttk.Label(self, text="Minimum Payment").grid(
-            row=1, column=3, padx=20, pady=10, sticky='n')
-        # Draw each net loan info
-        for i, loan in enumerate(self.loan_manager.loans):
-            ttk.Label(self, text=f"{loan.name}").grid(
-                row=i+2, column=0, padx=20, pady=10, sticky='n')
-            ttk.Label(self, text=f"${loan.principal:.2f}").grid(
-                row=i+2, column=1, padx=20, pady=10, sticky='n')
-            ttk.Label(self, text=f"{loan.rate*100:.2f}%").grid(
-                row=i+2, column=2, padx=20, pady=10, sticky='n')
-            ttk.Label(self, text=f"${loan.min_pmt:.2f}").grid(
-                row=i+2, column=3, padx=20, pady=10, sticky='n')
-            ttk.Button(self, text="Edit", command=lambda i=i: self.open_loan_popup(
-                i), bootstyle="warning").grid(row=i+2, column=4, padx=20, pady=10)
-            ttk.Button(self, text="Delete", command=lambda i=i: self.delete_loan(
-                i), bootstyle="danger").grid(row=i+2, column=5, padx=20, pady=10)
+        ).grid(row=0, column=0, sticky='ew', padx=20, pady=10)
 
-    def open_loan_popup(self, index=None):
+        # Create Treeview
+        self.tree = ttk.Treeview(self, columns=(
+            'Loan', 'Principal', 'Rate', 'Min Payment', 'Edit', 'Delete'), show='headings', style='primary.Treeview')
+        self.tree.grid(row=1, column=0, sticky='nsew', padx=20, pady=10)
+
+        # Define columns
+
+        self.tree.heading('Loan', text='Loan')
+        self.tree.heading('Principal', text='Principal')
+        self.tree.heading('Rate', text='Rate')
+        self.tree.heading('Min Payment', text='Min Payment')
+        # Configure treeview columns to expand
+        # Set minimum column widths to ensure headers are not cut off
+        self.tree.column('Loan', minwidth=200, stretch=True)
+        self.tree.column('Principal',
+                         minwidth=100, stretch=True)
+        self.tree.column('Rate', minwidth=100, stretch=True)
+        self.tree.column('Min Payment',
+                         minwidth=100, stretch=True)
+        self.tree.column('Edit', anchor='center', minwidth=20, stretch=False)
+
+        # Add loans to Treeview
+        for i, loan in enumerate(self.loan_manager.loans):
+            id = self.tree.insert('', 'end', values=(
+                f"{loan.name}", f"${loan.principal:.2f}", f"{loan.rate*100:.2f}%", f"${loan.min_pmt:.2f}", "Edit"))
+        # Bind click events for Edit and Delete
+        self.tree.bind('<ButtonRelease-1>', self._handle_click)
+
+        # Set style for edit and delete "butons"
+        self.tree.tag_configure('edit', foreground='blue')
+
+    def _handle_click(self, event):
+        item = self.tree.identify('item', event.x, event.y)
+        column = self.tree.identify_column(event.x)
+        if column == '#5' and item != "":  # Edit column
+            self._open_loan_popup(self.tree.index(item))
+
+    def _open_loan_popup(self, index=None):
         """Opens a popup window to edit the loan at the given index"""
         popup = Toplevel(self)
         editframe = EditFrame(popup, self.loan_manager, index,
                               refresh_callback=self.refresh_callback)
         editframe.grid(row=0, column=0, sticky='nsew')
-
-    def delete_loan(self, index):
-        """Deletes the loan at the given index then refreshes the frame"""
-        self.loan_manager.delete_loan(index)
-        # Calls the refresh callback, will eventually calls our own refresh too
-        if self.refresh_callback:
-            self.refresh_callback()
 
     def clear(self):
         for widget in self.winfo_children():

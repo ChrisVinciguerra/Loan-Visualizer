@@ -48,10 +48,12 @@ class EditFrame(ttk.Frame):
             value=self.loan_manager.loans[self.index].min_pmt if self.index is not None else 0)
         ttk.Entry(self, textvariable=self.min_payment_var, width=30).grid(
             row=3, column=1, pady=10, padx=10, sticky='n')
-        ttk.Button(self, text="Save", command=self.save_loan, bootstyle="success").grid(
+        ttk.Button(self, text="Save", command=self._save_loan, bootstyle="success").grid(
             row=4, column=0, pady=10)
+        ttk.Button(self, text="Delete", command=self._delete_loan, bootstyle="danger").grid(
+            row=4, column=1, pady=10)
 
-    def save_loan(self):
+    def _save_loan(self):
         name = self.name_var.get()
         principal = self.principal_var.get()
         interest = self.interest_var.get()
@@ -62,6 +64,12 @@ class EditFrame(ttk.Frame):
         else:
             self.loan_manager.add_loan(
                 name, Decimal(str(principal)), Decimal(str(interest))/100, Decimal(str(min_payment)))
+        if self.refresh_callback:
+            self.refresh_callback()
+        self.master.destroy()
+
+    def _delete_loan(self):
+        self.loan_manager.delete_loan(self.index)
         if self.refresh_callback:
             self.refresh_callback()
         self.master.destroy()

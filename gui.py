@@ -8,6 +8,13 @@ from loan import LoanManager, Plotter
 # TODO
 # Data validation for EVERYTHING
 # Add more typing hints
+# Show data inside a table instead? Or justify it and make it look better
+# Change the income menu to snap to the nearest point
+# Make it continue the last point indefinetley
+# Make it draggable to select income?
+# Fix figure sizing and grid box, don't guess
+# Show a chart of payments over time
+# Allow it to be positioned in real time, and show dates instead of months from 0
 
 
 class LoanApp(ttk.Window):
@@ -35,9 +42,6 @@ class LoanApp(ttk.Window):
         # Create the frame that will hold the plot
         self.plot_frame = PlotFrame(self, self.loan_manager, self.plotter)
         self.plot_frame.grid(row=2, column=0, columnspan=2, sticky='nsew')
-
-        # Draw the initial state
-        self.refresh()
 
     def refresh(self):
         self.loan_manager.save_to_file()

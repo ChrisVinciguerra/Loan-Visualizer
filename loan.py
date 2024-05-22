@@ -76,12 +76,12 @@ class LoanManager:
     Automatically updates the loan dataframe when loans are added, updated, or deleted
     """
 
-    def __init__(self, loans: list[Loan] = None, payment_bands=None):
+    def __init__(self, loans: list[Loan] = None, payment_bands: dict[int, Decimal] = None):
         self.loans = loans if loans is not None else []
-        self.loan_df: pd.DataFrame = pd.DataFrame()
+        self.loan_df = pd.DataFrame()
         self.payment_bands = payment_bands if payment_bands is not None else {
-            0: 1000}
-        self.refresh_loan_df()
+            0: Decimal(1000)}
+        self._refresh_loan_df()
 
     @staticmethod
     def read_from_file():
@@ -119,28 +119,28 @@ class LoanManager:
 
     def add_loan(self, name, principal, rate, min_pmt) -> None:
         self.loans.append(Loan(name, principal, rate, min_pmt))
-        self.refresh_loan_df()
+        self._refresh_loan_df()
 
     def update_loan(self, index, name, principal, rate, min_pmt) -> None:
         if 0 <= index < len(self.loans):
             self.loans[index] = Loan(name, principal, rate, min_pmt)
-            self.refresh_loan_df()
+            self._refresh_loan_df()
 
     def delete_loan(self, index) -> None:
         if 0 <= index < len(self.loans):
             del self.loans[index]
-            self.refresh_loan_df()
+            self._refresh_loan_df()
 
     def add_payment_band(self, month: int, payment: Decimal) -> None:
         self.payment_bands[month] = payment
-        self.refresh_loan_df()
+        self._refresh_loan_df()
 
     def delete_payment_band(self, month: int) -> None:
         if month in self.payment_bands:
             del self.payment_bands[month]
             if self.payment_bands == {}:
-                self.payment_bands = {0: 1000}
-            self.refresh_loan_df()
+                self.payment_bands = {0: Decimal(1000)}
+            self._refresh_loan_df()
         # Dont let it ever be empty
 
     def find_payment_amount(self, month: int) -> Decimal:
@@ -152,7 +152,7 @@ class LoanManager:
         index = bisect.bisect_right(months, month)
         return incomes[index-1]
 
-    def refresh_loan_df(self) -> None:
+    def _refresh_loan_df(self) -> None:
         """
         Calculate the balance of loans over time
         Given a list of Loans, custom payments, and a snowball amount
@@ -174,7 +174,6 @@ class LoanManager:
             # Calculate the next month on each loan
             minimum_payments = sum(
                 (min(loan.min_pmt, loan.balances[-1]) for loan in ongoing_loans))
-            print(month, payment, minimum_payments)
             snowball_amt = payment - minimum_payments
             if snowball_amt < 0:
                 raise ValueError(
